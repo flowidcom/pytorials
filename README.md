@@ -1,2 +1,3 @@
-# pytorials
+# Pytorials
+
 Tutorials for Python
