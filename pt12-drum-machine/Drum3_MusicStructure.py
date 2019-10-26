@@ -14,7 +14,7 @@ hh_closed_wave = sa.WaveObject.from_wave_file("beats/hh_closed.wav")
 def playTracks(bpm, tracks, barsToPlay):
     quartersPerBar = 4
     beat = 60 / bpm / quartersPerBar  # 16th note expressed in seconds
-    step = 1
+    step = 0
     while step < barsToPlay * quartersPerBar:
         beatStart = time.time()
         for track in tracks:

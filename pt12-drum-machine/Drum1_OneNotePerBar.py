@@ -16,7 +16,7 @@ beatsPerMeasure = 4
 beat = 60 / bpm / beatsPerMeasure  # 16th note expressed in seconds
 
 barsToPlay = 2
-step = 1
+step = 0
 while step < barsToPlay * len(phrase):
     playNote = phrase[step % 16] == 'X'
     if playNote:
