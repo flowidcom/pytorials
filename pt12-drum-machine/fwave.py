@@ -14,16 +14,13 @@ FRAMERATE = 44100
 try:
     from IPython.display import Audio
 except Exception:
-    logger.debug("Can't import Audio from IPython.display Wave.make_audio() will not work.")
+    logger.debug("Can't import Audio from IPython.display")
 
 
 class FWave:
     def __init__(self, ys, ts=None, framerate=None):
-        """Initializes the wave.
-
-        ys: wave array
-        ts: array of times
-        framerate: samples per second
+        """
+        Initializes the wave.
         """
         self.ys = np.asanyarray(ys)
         self.framerate = framerate if framerate is not None else FRAMERATE
@@ -34,10 +31,6 @@ class FWave:
             self.ts = np.asanyarray(ts)
 
     def copy(self):
-        """Makes a copy.
-
-        Returns: new Wave
-        """
         return copy.deepcopy(self)
 
     def __len__(self):
@@ -52,11 +45,8 @@ class FWave:
         return len(self.ys) / self.framerate
 
     def __add__(self, other):
-        """Adds two waves elementwise.
-
-        other: Wave
-
-        returns: new Wave
+        """
+        Adds two waves elementwise.
         """
         if other == 0:
             return self
@@ -78,35 +68,30 @@ class FWave:
 
         return newWave
 
+    __radd__ = __add__
+
     def addWave(self, other):
-        # internal method that assumes that the self has a larger time span than the other
+        # Internal method that assumes that the self has a larger time span than the other
         logger.debug("Adding wave. Current: start: %0.3f, end: %0.3f, New: start: %0.3f",
                      self.start * 1000, self.end * 1000, other.start * 1000)
-        i = findIndex(other.start, self.ts)
-        diff = self.ts[i] - other.start
-        if diff > 0.1:  # at most 0.1 secs apart
-            logger.info("Time does not line up. Self timestamp is %0.3f, new wave start is: %0.3f",
-                        self.ts[i], other.start)
-        j = i + len(other)
-        self.ys[i:j] += other.ys
+        start = findIndex(other.start, self.ts)
+        size = len(other);
+        j = start + size
+        self.ys[start: start + size] = self.ys[start: start+size] + other.ys
 
     def __or__(self, other):
-        """Concatenates two waves.
-
-        other: Wave
-
-        returns: new Wave
+        """
+        Concatenates two waves.
         """
         if self.framerate != other.framerate:
-            raise ValueError('Wave.__or__: framerates do not agree')
+            raise ValueError('Wave.__or__: different framerates')
 
         ys = np.concatenate((self.ys, other.ys))
         return FWave(ys, framerate=self.framerate)
 
     def normalize(self, amp=1.0):
-        """Normalizes the signal to the given amplitude.
-
-        amp: float amplitude
+        """
+        Normalizes the signal to the given amplitude.
         """
         high, low = abs(max(self.ys)), abs(min(self.ys))
         self.ys = amp * self.ys / max(high, low)
@@ -119,28 +104,44 @@ class FWave:
     def end(self):
         return self.ts[-1] if len(self.ts > 0) else 0
 
-    def find_index(self, t):
-        """Find the index corresponding to a given time."""
-        n = len(self)
-        start = self.start
-        end = self.end
-        i = round((n - 1) * (t - start) / (end - start))
-        return int(i)
+    def findIndex(self, t):
+        """
+        Find the index corresponding to a given time.
+        """
+        return findIndex(t, self.ts)
 
     def plot(self, style='', **options):
         pyplot.plot(self.ts, self.ys, style, **options)
 
     def shift(self, shift):
-        """Shifts the wave left or right in time.
-
-        shift: float time shift
+        """
+        Shifts the wave left or right in time.
         """
         self.ts += shift
 
-    def write(self, filename='sound.wav'):
-        """Write a wave file.
+    def segment(self, start=None, segDuration=None):
+        """
+        Extracts a segment, truncate if necessary
+        """
+        if start is None:
+            start = self.ts[0]
+            i = 0
+        else:
+            i = self.find_index(start)
 
-        filename: string
+        if segDuration is None:
+            segDuration = self.duration - start
+        elif start + segDuration > self.duration:
+            segDuration = self.duration - start;
+
+        j = self.findIndex(start + segDuration)
+        ys = self.ys[i:j].copy()
+        ts = self.ts[i:j].copy()
+        return FWave(ys, ts, self.framerate)
+
+    def write(self, filename='sound.wav'):
+        """
+        Write a wave file.
         """
         nchannels = 1
         sampwidth = 2  # 16 bits
@@ -227,12 +228,19 @@ def playWave(filename='sound.wav', player='afplay'):
 
 
 def findIndex(x, xs):
-    """Find the index corresponding to a given value in an array."""
+    """
+    Find the index corresponding to a given value in an array.
+    Assuming a linear timeline
+    """
     n = len(xs)
     start = xs[0]
     end = xs[-1]
-    i = round((n - 1) * (x - start) / (end - start))
-    return int(i)
+    i = int(round((n - 1) * (x - start) / (end - start)))
+    i = i if i < n else n - 1
+    if (xs[i] - x) > 0.1:  # at most 0.1 secs apart
+        logger.info("Time does not line up. Self timestamp is %0.3f, new wave start is: %0.3f",
+                    xs[i], x)
+    return i
 
 
 def quantize(ys, bound, dtype):
@@ -271,17 +279,18 @@ def makeBeat(file, phrase, bpm, beatsPerMeasure=4):
     beatLength = 60 / bpm / beatsPerMeasure
     track = initWave(beatLength * len(phrase))
 
-    bip = readWave(file)
+    sound = readWave(file)
 
     for step in range(len(phrase)):
-        logger.debug("Step %d, adding bip %s with duration: %d", step, file, bip.duration)
+        logger.debug("Step %d, adding bip %s with duration: %0.3f", step, file, sound.duration)
 
         playNote = phrase[step % 16] == 'X'
         if playNote:
             # copy the bit to the track
-            stepWave = bip.copy()
-            stepWave.shift(step * beatLength);
-            logger.debug("Bip start: %0.3f, duration %0.3f", stepWave.start, bip.duration)
+            stepWave = sound.copy()
+            stepWave = stepWave.segment(segDuration=(len(phrase) - step) * beatLength)  # clip if too long
+            stepWave.shift(step * beatLength);  # move it to the right
+            logger.debug("Bip start: %0.3f, duration %0.3f", stepWave.start, sound.duration)
             track = track + stepWave
 
     return track

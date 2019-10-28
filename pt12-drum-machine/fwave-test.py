@@ -1,9 +1,38 @@
 from fwave import FWave, readWave, playWave, makeBeat, writeWave, repeatWave, makeAudio, initWave
+import glob
 import matplotlib.pyplot as plt
 
 import logging
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
+
+def testAllWavFiles():
+    song = initWave()
+    for f in glob.glob("beats/*.wav"):
+        logging.info("Adding: %s", f)
+        beat = makeBeat(f, "X" * 16, 120)
+        song = song + beat
+
+    song.play()
+
+
+# testAllWavFiles()
+
+def testCymbal():
+    beat = makeBeat("beats/cymbals_6.wav", "XX", 120)
+    beat.play()
+
+
+def testCymbal2():
+    w = readWave("beats/cymbals_6.wav")
+    print(w)
+    #    w = readWave("beats/bass.wav")
+    w.write("song.wav")
+    playWave("song.wav", 'afplay')
+
+
+# testCymbal()
 
 def test1():
     w = readWave("beats/bass.wav")
@@ -22,15 +51,14 @@ def test1():
     playWave("song.wav", 'afplay')
 
 
-test1()
-
+# test1()
 
 def test2():
     song = makeBeat("beats/bass.wav", "X...X...X...X...", 120);
     song.play(player='afplay')
 
 
-test2()
+# test2()
 
 
 def test4():
